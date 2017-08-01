@@ -1,0 +1,1 @@
+./build.sh layerOptimize=shrinksafe optimize=shrinksafe cssOptimize=shrinksafe mini=true profile=baseplus action=release,clean releaseDir=../../../ releaseName=release version=1.7.0

@@ -1,0 +1,207 @@
+<!--
+    editor.html is part of Appudo
+
+    Copyright (C) 2011-2016
+        00bd5bdef476a7cd2138cc18cb0274bf9dac8503cf7f406bcdff73381391c976 source@appudo.com
+        31e58341d31d3a196ed6502a68b4f87115456459d60f5a1d70c00779266aec60 source@appudo.com
+
+    Licensed under the Apache License, Version 2.0
+
+    See http://www.apache.org/licenses/LICENSE-2.0 for more information
+-->
+
+<div data-dojo-id="page" data-dojo-type="appudo.TemplateContent" data-dojo-props="gutters:false,ctx:{}">
+	<script type="dojo/method">
+			var parent = dijit.getEnclosingWidget(this.domNode.parentNode);
+			appudo.on(parent, 'show', this, function() {
+				dojo.global.page = this;
+				ctx.tabFocus();
+			});
+
+			appudo.focus(parent);
+			var ctx = dojo.mixin(parent.ctx, this.ctx);
+			ctx.parent = parent;
+			this.ctx = this.initCtx('page', ctx);
+			ctx.dlgs = {}; 
+			ctx.tmpl = {};
+			
+			var _this = this;
+			setTimeout(function() {
+				var ed = dojo.query('.Over', _this.domNode);
+				if(ed.length != 0) 
+					dojo.destroy(ed[0]);
+			}, 0); 
+
+			var nlsItems = dojo.query('.nls', this.domNode);
+			ctx.editNls = editNls;
+			ctx.nls = nls;
+			nlsItems.forEach(function(item) { 
+				item.innerHTML = _this._stringRepl(item.innerHTML);
+			});
+
+                        dojo.query('.load', this.domNode).forEach(function(node, index, nodelist) {
+                            ctx.loadNode = node;
+                        });
+                        ctx.updateLoad = function(t) {
+                                switch(t){
+                                        case 0:
+                                                ctx.loadNode.innerHTML = '<span class="dijitIconLoading dijitInline lIcon"></span>' + nls.load;
+                                                break;
+                                        case 1:
+                                                ctx.loadNode.innerHTML = 'error';
+                                                break;
+                                }
+                        }
+    	</script>
+   	<script type="dojo/method" data-dojo-event="initCtx" data-dojo-args="widget, ctx">
+				var p = this;
+				var pctx = p.ctx;
+				if(!ctx)
+					ctx = {};
+				ctx.r = '/'+appudo.random();
+				switch(widget) {
+				case 'page':
+                                        ctx.file = '/edit/7/3/'+ctx.id;
+					ctx.tabFocus = function() { 
+						appudo.focus(ctx.parent);
+						var editor = ctx.codeEditor;
+							
+						if(editor && editor.focus)
+							editor.focus();
+					}
+					ctx.parent.changed = function() { 
+						return ctx.codeChanged && ctx.codeChanged();
+					}				
+					ctx.save = function() { 
+						var editor = ctx.codeEditor;
+						if(!editor || !editor.changed())
+							return;
+						var r = editor.getDiff();
+						var txt = editor.getText();
+						var o = ctx.r;
+						var n = ctx.absName;
+						ctx.r = '/'+appudo.random();
+						r.writeString('&f='+n+'&l='+n.length);
+						r = r.getResult();
+                                                appudo.postBinary('/edit/7/2/'+ctx.id+o+ctx.r, r).then(function(h){
+							appudo.cache(ctx.file, txt);
+							if(h.r == 0)
+                                                                editor.textSaved();
+						});
+					}
+					ctx.parent.save = ctx.save;
+					ctx.setTxt = function(txt) {  
+						var editor = ctx.codeEditor;
+						editor.setText(txt);
+						editor.show();
+					}
+					ctx.initEdit = function() { 
+						var editor = ctx.codeEditor;
+						if(editor && editor.started && !editor.started()) {
+							ctx.codeChanged = editor.changed;
+							ctx.codeText();
+							if(ctx.mode)
+								ctx.setMode(ctx.mode);
+						}
+                                        }
+					ctx.codeText = function() {  
+						ctx.codeEditor.hide();
+                                                ctx.updateLoad(0);
+                                                appudo.postPlain('/edit/8/3'+ctx.r, 'f='+ctx.absName+'&i='+ctx.id, function() {
+                                                    ctx.updateLoad(1);
+                                                }).then(function(data){
+							appudo.cache(ctx.file, data);
+							if(data !== undefined)
+								ctx.setTxt(data);
+						});
+					}
+				  	ctx.updateTitle = function() {
+						ctx.setTitle(ctx.codeEditor.changed()); 
+				  	}
+					ctx.code = function() { 
+						var iframe = dojo.query('.bframe', ctx.cEdit.domNode)[0];
+						ctx.codeMenu.bindDomNode(iframe);
+						ctx.codeEditor = appudo.getDoc(iframe);
+						ctx.codeOffset = dojo.position(iframe);
+						appudo.initEdit(ctx, iframe, null);
+						ctx.codeMenu.ctx.pinit();
+					}	
+					ctx.setTitle = function(change) { 
+						var parent = ctx.parent;
+						if(change == parent._changed)
+							return;
+						var t = parent.get('title');
+						if(!change) {
+							parent.set('title', t.charAt(0) == '*' ? t.substr(1) : t);
+						} else {
+							parent.set('title', '*'+t); 
+						}
+						parent._changed = change;
+                                        }
+					ctx.modes = [null, null, 'ace/mode/html', 'ace/mode/css', 'ace/mode/javascript'];
+					ctx.setMode = function(mode) { 
+						ctx.drop.setIconClass(appudo.fileClass(mode)); 
+						ctx.codeEditor.setMode(ctx.modes[mode]);
+					}
+					break;
+				case 'codeBar':
+					ctx.addC = function() { alert('1'); };
+					ctx.selM = function(idx) { return function() { pctx.setMode(idx) }};
+					break;
+				case 'codeMenu':
+					ctx.init = function() { pctx.codeMenu = codeMenu; }
+					ctx.pinit = function() { 
+								var editor = pctx.codeEditor;
+								ctx.editor = editor;	
+								var children = codeMenu.getChildren(); 
+								appudo.on(codeMenu, 'close', function(e) { 	
+									pctx.tabFocus();
+								});
+								dojo.connect(codeMenu, '_openMyself', codeMenu, function(e) { 				
+									ctx.undoI = children[0];
+									ctx.redoI = children[1];
+									ctx.saveI = children[2];
+									ctx.undoI.set('disabled', !ctx.editor.hasUndo());
+									ctx.redoI.set('disabled', !ctx.editor.hasRedo());
+									ctx.saveI.set('disabled', !ctx.editor.changed());
+								}); 
+					}
+					ctx.undo = function() { ctx.editor.undo(); };
+					ctx.redo = function() { ctx.editor.redo(); };
+					ctx.save = function() { pctx.save(); };
+					ctx.copy = function() { };
+					ctx.cut = function() { };
+					ctx.paste = function() { };
+					break;
+				}
+				return ctx;
+    	</script>
+   	<div class="Over"></div>
+    <div data-dojo-type="dijit.layout.ContentPane" data-dojo-props="baseClass:'barCont', region:'top'">		
+  		<div data-dojo-id="codeBar" data-dojo-type="dijit.Toolbar" data-dojo-props="ctx:page.initCtx('codeBar')">
+       		<div data-dojo-id="page.ctx.drop" data-dojo-type="appudo.AddDropDown" data-dojo-props="iconClass:'iFile'">
+				<span>Set Mode</span>
+				<div data-dojo-id="page.ctx.menu" data-dojo-type="dijit.Menu" data-dojo-props="title:''">	
+					<div data-dojo-type="dijit.MenuItem" data-dojo-props="iconClass:'iFile', onClick:codeBar.ctx.selM(0),label:editNls.txt"></div>	
+					<div data-dojo-type="dijit.MenuItem" data-dojo-props="iconClass:'iHTML', onClick:codeBar.ctx.selM(2),label:editNls.html"></div>		
+					<div data-dojo-type="dijit.MenuItem" data-dojo-props="iconClass:'iCSS', onClick:codeBar.ctx.selM(3),label:editNls.css"></div>		
+					<div data-dojo-type="dijit.MenuItem" data-dojo-props="iconClass:'iCode', onClick:codeBar.ctx.selM(4),label:editNls.js"></div>					
+				</div>
+			</div>	
+    	</div> 			
+   	</div> 	
+  	<div data-dojo-id="page.ctx.cEdit" data-dojo-type="dijit.layout.ContentPane" data-dojo-props="baseClass:'mPane', region:'center'">
+ 		<ul data-dojo-type="dijit.Menu" data-dojo-id="codeMenu" data-dojo-props="style:'display:none;', ctx:page.initCtx('codeMenu')">
+			<li data-dojo-type="dijit.MenuItem" data-dojo-props="onClick:codeMenu.ctx.undo, iconClass:'dijitEditorIcon dijitEditorIconUndo', label:nls.undo"></li>
+	        <li data-dojo-type="dijit.MenuItem" data-dojo-props="onClick:codeMenu.ctx.redo, iconClass:'dijitEditorIcon dijitEditorIconRedo', label:nls.redo"></li>
+	        <li data-dojo-type="dijit.MenuItem" data-dojo-props="onClick:codeMenu.ctx.save, iconClass:'iDisk', label:nls.save"></li>		
+	        <li data-dojo-type="dijit.MenuSeparator"></li>
+	        <li data-dojo-type="dijit.MenuItem" data-dojo-props="onClick:codeMenu.ctx.copy, iconClass:'dijitEditorIcon dijitEditorIconCopy', label:nls.copy"></li>				
+	        <li data-dojo-type="dijit.MenuItem" data-dojo-props="onClick:codeMenu.ctx.cut, iconClass:'dijitEditorIcon dijitEditorIconCut', label:nls.cut"></li>	
+	        <li data-dojo-type="dijit.MenuItem" data-dojo-props="onClick:codeMenu.ctx.paste, iconClass:'dijitEditorIcon dijitEditorIconPaste', label:nls.paste"></li>
+	    </ul>
+ 		<iframe class="bframe"></iframe>
+    	<span class="nls load"><span class="dijitIconLoading dijitInline lIcon"></span>${ctx.nls.load}</span>
+   		<script type="dojo/connect" data-dojo-event="startup">page.ctx.code();</script>	
+ 	</div>
+</div>
